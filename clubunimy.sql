@@ -66,14 +66,14 @@ CREATE TABLE `club_activity` (
 --
 
 INSERT INTO `club_activity` (`club_id`, `club_image`, `club_content`, `club_content_2`, `club_date`, `club_time`, `club_contact`, `club_name`, `club_type`) VALUES
-(1, 'img/UNIMY Clubs May21 Sem_page-0002.jpg', 'Club Esport', 'Test', '2022-04-11', '10:41 pm', '0178782932', 'Zakaria', 'esport'),
-(2, 'img/UNIMY Clubs May21 Sem_page-0003.jpg', 'Hackerthon', 'Meet and greet with staff', '2022-09-12', '5.00pm', '032039032', 'Ahmad', 'cyber'),
-(3, 'img/UNIMY Clubs May21 Sem_page-0004.jpg', 'Capture nice photo!', 'Travel and trip around park', '2022-02-08', '3.00 pm', '0167267823', 'Siti', 'photo'),
-(4, 'img/UNIMY Clubs May21 Sem_page-0006.jpg', 'Learn Japanese Language', 'Attend Japanese class!', '2022-09-01', '3.00 pm', '0178789233', 'Jann', 'japan'),
-(5, 'img/UNIMY Clubs May21 Sem_page-0007.jpg', 'Air freshener for All', 'Go hiking with team', '2022-01-10', '4.00 pm', '0189892032', 'Ali', 'advent'),
-(6, 'img/UNIMY Clubs May21 Sem_page-0005.jpg', 'Learn instrument with musician', 'Attend musician class', '2022-07-14', '5.00 pm', '0123454321', 'Abu', 'music'),
-(7, 'img/UNIMY Clubs May21 Sem_page-0008.jpg', 'Biztech for All', 'Learn from experiences worker!', '2022-09-02', '4.00 pm', '0178789203', 'Akmal', 'biztech'),
-(8, 'img/UNIMY Clubs May21 Sem_page-0009.jpg', 'The Future IRS', 'Attend lab class', '2022-09-05', '5.00 pm', '0189283920', 'Hafiz', 'inge');
+(1, '', 'Club Esport', 'Test', '2027-04-11', '10:41 pm', '0178782932', 'Zakaria', 'esport'),
+(2, '', 'Hackerthon', 'Meet and greet with staff', '2027-09-12', '5.00pm', '032039032', 'Ahmad', 'cyber'),
+(3, '', 'Capture nice photo!', 'Travel and trip around park', '2027-02-08', '3.00 pm', '0167267823', 'Siti', 'photo'),
+(4, '', 'Learn Japanese Language', 'Attend Japanese class!', '2027-09-01', '3.00 pm', '0178789233', 'Jann', 'japan'),
+(5, '', 'Air freshener for All', 'Go hiking with team', '2027-01-10', '4.00 pm', '0189892032', 'Ali', 'advent'),
+(6, '', 'Learn instrument with musician', 'Attend musician class', '2027-07-14', '5.00 pm', '0123454321', 'Abu', 'music'),
+(7, '', 'Biztech for All', 'Learn from experiences worker!', '2027-09-02', '4.00 pm', '0178789203', 'Akmal', 'biztech'),
+(8, '', 'The Future IRS', 'Attend lab class', '2027-09-05', '5.00 pm', '0189283920', 'Hafiz', 'inge');
 
 -- --------------------------------------------------------
 
@@ -84,8 +84,8 @@ INSERT INTO `club_activity` (`club_id`, `club_image`, `club_content`, `club_cont
 CREATE TABLE `email` (
   `id_email` int(100) NOT NULL,
   `subject_email` varchar(200) NOT NULL,
-  `body_email` varchar(200) NOT NULL,
-  `altbody_email` varchar(200) NOT NULL
+  `body_email` text NOT NULL,
+  `altbody_email` text NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 --
@@ -93,7 +93,7 @@ CREATE TABLE `email` (
 --
 
 INSERT INTO `email` (`id_email`, `subject_email`, `body_email`, `altbody_email`) VALUES
-(1, 'Registration UNIMY Club 2022', 'Registration UNIMY Club for Students 2022', 'Registration UNIMY Club for Students 2022');
+(1, 'Club Registration 2022', 'Club Registration for Students 2022', 'Club Registration for Students 2022');
 
 -- --------------------------------------------------------
 
@@ -112,7 +112,7 @@ CREATE TABLE `limitseminar` (
 --
 
 INSERT INTO `limitseminar` (`id_limit2`, `jumlah_limit2`, `mesej_limit2`) VALUES
-('', '200', 'Full Registered');
+('1', '200', 'Full Registered');
 
 -- --------------------------------------------------------
 
@@ -126,7 +126,8 @@ CREATE TABLE `user` (
   `studentid_user` varchar(200) NOT NULL,
   `email_user` varchar(200) NOT NULL,
   `phone_user` varchar(200) NOT NULL,
-  `club_user` varchar(200) NOT NULL
+  `club_user` varchar(200) NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 --
@@ -134,7 +135,7 @@ CREATE TABLE `user` (
 --
 
 INSERT INTO `user` (`id_user`, `name_user`, `studentid_user`, `email_user`, `phone_user`, `club_user`) VALUES
-(0, 'Ahmad Munir', 'B08180002', 'munir@yahoo.com', '0178782930', 'Photography,Japananime,Adventurous Recreational,');
+(1, 'Ahmad Munir', 'B08180002', 'munir@yahoo.com', '0178782930', 'Photography,Japananime,Adventurous Recreational,');
 
 --
 -- Indexes for dumped tables
@@ -179,6 +180,12 @@ ALTER TABLE `club_activity`
 --
 ALTER TABLE `email`
   MODIFY `id_email` int(100) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+
+--
+-- AUTO_INCREMENT for table `user`
+--
+ALTER TABLE `user`
+  MODIFY `id_user` int(100) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

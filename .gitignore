@@ -1,0 +1,6 @@
+# Local secrets
+club-unimy/mail-config.php
+
+# Uploaded files
+club-unimy/uploads/activities/*
+!club-unimy/uploads/activities/.gitignore

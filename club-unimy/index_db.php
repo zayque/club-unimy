@@ -1,101 +1,68 @@
 <?php
-// Import PHPMailer classes into the global namespace
-// These must be at the top of your script, not inside a function
-use PHPMailer\PHPMailer\PHPMailer;
-use PHPMailer\PHPMailer\Exception;
+/**
+ * Handles the public club registration form (club-form.php).
+ */
+require_once __DIR__ . '/lib/app.php';
+require_once __DIR__ . '/lib/mailer.php';
 
-//Load Composer's autoloader
-require 'vendorphpmailer/autoload.php';
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    redirect('club-form.php');
+}
+csrf_check();
 
-$mail = new PHPMailer(true);
-	
-if (isset($_POST['submit'])) {
-	
-	include_once 'config-mysqli.php';
+$old = [
+    'name'      => trim($_POST['name1'] ?? ''),
+    'studentid' => strtoupper(trim($_POST['idstudent1'] ?? '')),
+    'email'     => strtolower(trim($_POST['email1'] ?? '')),
+    'phone'     => preg_replace('/[^0-9+]/', '', $_POST['notel1'] ?? ''),
+    'clubs'     => array_values(array_intersect(array_column(CLUBS, 'keyword'), (array)($_POST['check'] ?? []))),
+];
 
+$errors = [];
+if (mb_strlen($old['name']) < 3) $errors['name'] = 'Enter your full name.';
+if (!preg_match('/^[A-Z0-9]{5,10}$/', $old['studentid'])) $errors['studentid'] = 'Enter a valid student ID (5–10 letters and numbers).';
+if (!filter_var($old['email'], FILTER_VALIDATE_EMAIL)) $errors['email'] = 'Enter a valid email address.';
+if (strlen($old['phone']) < 9 || strlen($old['phone']) > 13) $errors['phone'] = 'Enter a phone number with 9–12 digits.';
+if (!$old['clubs']) $errors['clubs'] = 'Choose at least one club.';
 
-	$name1= mysqli_real_escape_string($conn, $_POST['name1']);
-	$idstudent1= mysqli_real_escape_string($conn, $_POST['idstudent1']);
-	$email1 = mysqli_real_escape_string($conn, $_POST['email1']);
-	$notel1= mysqli_real_escape_string($conn, $_POST['notel1']);
-	$iduser1= mysqli_real_escape_string($conn, $_POST['iduser1']);
-	// $chk= mysqli_real_escape_string($conn, $_POST['chk']);
-
-	// check user
-	$verify_userid =  mysqli_query($conn,"SELECT count(*) AS 'Total' FROM user WHERE studentid_user = '".$idstudent1."' OR email_user = '".$email1."'");
-	$f_verify_userid = mysqli_fetch_array($verify_userid);
-
-	//echo "<script>alert('".$f_verify_userid['Total']."');</script>";
-
-	if($f_verify_userid['Total'] > 0){
-		echo "<script>window.location='club-form.php?msg=duplicate';</script>";
-	}else{
-		$checkbox1=$_POST['check'];  
-		$chk="";  	
-	
-			foreach ($checkbox1 as $chk1){  
-				$chk .= $chk1.",";  
-			}  
-	
-			if ($resultCheck > 1) {
-				header("Location: club-form.php?club-form=usertaken");
-				exit();
-			} 		
-			else{
-				$sql=mysqli_query($conn,"insert into user
-					(name_user,studentid_user,email_user,phone_user,id_user,club_user) 
-					values 
-					('$name1','$idstudent1','$email1','$notel1','$iduser1','$chk')"); 
-
-					$body1 =  mysqli_query($conn,"select * from email ORDER BY id_email ASC");
-					$body1 = mysqli_fetch_array($body1);
-					$subject1 =  mysqli_query($conn,"select * from email ORDER BY id_email ASC");
-					$subject1 = mysqli_fetch_array($subject1);
-					$altbody1 =  mysqli_query($conn,"select * from email ORDER BY id_email ASC");
-					$altbody1 = mysqli_fetch_array($altbody1);
-
-
-					echo "<script>window.location='display.php';</script>";
-				
-
-							$mail->SMTPDebug = 2;                                 // Enable verbose debug output
-							$mail->isSMTP();                                      // Set mailer to use SMTP
-							$mail->Host = 'smtp.gmail.com';  // Specify main and backup SMTP servers
-							$mail->SMTPAuth = true;                               // Enable SMTP authentication
-							$mail->Username = 'akmalhafizyakuza@gmail.com';                 // SMTP username
-							$mail->Password = 'Akmalhafiz321';                           // SMTP password
-							$mail->SMTPSecure = 'tls';                            // Enable TLS encryption, `ssl` also accepted
-							$mail->Port = 587;                                    // TCP port to connect to
-
-							//Recipients
-							$mail->setFrom('unimyclub@gmail.com', 'UNIMY CLUB');
-							$mail->addAddress($email1);     // Add a recipient
-
-							$a= $body1['body_email'];
-							$b= $subject1['subject_email'];
-							$c= $altbody1['altbody_email'];
-
-							//Content
-							$mail->isHTML(true);                                  // Set email format to HTML
-							$mail->Subject = $b;
-							$mail->Body    = $a;
-							$mail->AltBody = $c;
-
-							$mail->send();
-							echo 'Message has been sent';
-					
-						exit;
-							
-			}
-	}
-
-
-	
-				
-			
+$settings = registration_settings();
+if (total_students() >= $settings['limit']) {
+    $errors['form'] = $settings['message'];
 }
 
+if (!$errors) {
+    $dup = row("SELECT studentid_user, email_user FROM user WHERE studentid_user = ? OR email_user = ? LIMIT 1", [$old['studentid'], $old['email']]);
+    if ($dup) {
+        if (strcasecmp($dup['studentid_user'], $old['studentid']) === 0) {
+            $errors['studentid'] = 'This student ID is already registered. Sign in to the student portal to change your clubs.';
+        } else {
+            $errors['email'] = 'This email is already registered.';
+        }
+    }
+}
 
+if ($errors) {
+    $_SESSION['reg_errors'] = $errors;
+    $_SESSION['reg_old'] = $old;
+    redirect('club-form.php#form');
+}
 
+$student = [
+    'name_user'      => $old['name'],
+    'studentid_user' => $old['studentid'],
+    'email_user'     => $old['email'],
+    'phone_user'     => $old['phone'],
+    'club_user'      => clubs_to_store($old['clubs']),
+];
+q("INSERT INTO user (name_user, studentid_user, email_user, phone_user, club_user) VALUES (?, ?, ?, ?, ?)", array_values($student));
 
-?>
+// Email is optional: registration succeeds even if it can't be sent.
+$mailError = send_welcome_email($student);
+
+$_SESSION['reg_done'] = [
+    'name'  => $student['name_user'],
+    'email' => $student['email_user'],
+    'clubs' => $old['clubs'],
+    'mailed' => $mailError === null,
+];
+redirect('display.php');

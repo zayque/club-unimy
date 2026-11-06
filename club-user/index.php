@@ -1,764 +1,441 @@
-<?php 
-    // Include database connection
-    include('session.php');
-    if(!isset($_SESSION['login_user'])){
-        header("location: loginUser.php"); // Redirecting To Home Page
-    }
+<?php
+require_once __DIR__ . '/lib.php';
+$student = require_student();
+
+/** Font Awesome 5 names for the shared club icons. */
+function fa5(string $icon): string
+{
+    return ['fa-shield' => 'fa-shield-alt'][$icon] ?? $icon;
+}
+
+$myClubs = club_list($student['club_user']);
+$myTypes = [];
+foreach ($myClubs as $k) {
+    if ($c = club_by_keyword($k)) $myTypes[] = $c['type'];
+}
+
+// Activities: upcoming (soonest first), then past (most recent first)
+$today = strtotime('today');
+$upcoming = [];
+$past = [];
+foreach (rows("SELECT * FROM club_activity ORDER BY club_date ASC, club_id ASC") as $a) {
+    if (!isset(CLUBS[$a['club_type']])) continue;
+    $a['ts'] = strtotime($a['club_date']) ?: 0;
+    if ($a['ts'] >= $today) $upcoming[] = $a; else $past[] = $a;
+}
+$past = array_reverse($past);
+$next = null;
+foreach ($upcoming as $a) {
+    if (in_array($a['club_type'], $myTypes, true)) { $next = $a; break; }
+}
+
+$firstName = explode(' ', trim($student['name_user']))[0] ?: 'there';
+$initial = strtoupper(substr($firstName, 0, 1));
+$flashes = take_flashes();
+
+function days_label(int $ts): string
+{
+    $d = (int)round(($ts - strtotime('today')) / 86400);
+    return $d === 0 ? 'Today' : ($d === 1 ? 'Tomorrow' : ($d > 1 ? "In $d days" : abs($d) . ' days ago'));
+}
+
+function activity_card(array $a, bool $mine, bool $isPast): void
+{
+    $c = CLUBS[$a['club_type']]; ?>
+    <div class="col-md-6 col-lg-4 mb-4 cb-act-col" data-club="<?= $a['club_type'] ?>" data-mine="<?= $mine ? 1 : 0 ?>" data-past="<?= $isPast ? 1 : 0 ?>">
+        <article class="cb-activity<?= $isPast ? ' is-past' : '' ?>">
+            <div class="cb-activity-media" style="background:linear-gradient(135deg, <?= $c['color'] ?>, #0f172a)">
+                <i class="fas <?= fa5($c['icon']) ?>"></i>
+                <?php if (!empty($a['club_image'])) { ?>
+                    <img src="<?= e($a['club_image']) ?>" alt="" loading="lazy" onerror="this.remove()">
+                <?php } ?>
+                <?php if ($a['ts']) { ?>
+                <div class="cb-date"><strong><?= date('d', $a['ts']) ?></strong><span><?= date('M Y', $a['ts']) ?></span></div>
+                <span class="cb-when<?= $isPast ? ' past' : '' ?>"><?= $isPast ? 'Past' : days_label($a['ts']) ?></span>
+                <?php } ?>
+            </div>
+            <div class="cb-activity-body">
+                <div class="d-flex align-items-center justify-content-between" style="gap:.5rem">
+                    <span class="cb-activity-tag" style="color:<?= $c['color'] ?>"><?= e($c['name']) ?></span>
+                    <?php if ($mine) { ?><span class="cb-mine"><i class="fas fa-check"></i> Your club</span><?php } ?>
+                </div>
+                <h3><?= e($a['club_content']) ?></h3>
+                <p><?= e($a['club_content_2']) ?></p>
+                <div class="cb-meta">
+                    <span><i class="far fa-clock"></i><?= e($a['club_time']) ?></span>
+                    <span><i class="far fa-user"></i><?= e($a['club_name']) ?></span>
+                    <?php if ($a['club_contact']) { ?><span><i class="fas fa-phone-alt"></i><?= e($a['club_contact']) ?></span><?php } ?>
+                </div>
+                <?php if (!$isPast) { ?>
+                <a href="ics.php?id=<?= (int)$a['club_id'] ?>" class="cb-cal"><i class="far fa-calendar-plus"></i> Add to calendar</a>
+                <?php } ?>
+            </div>
+        </article>
+    </div>
+<?php }
 ?>
-
-
 <!DOCTYPE html>
 <html lang="en">
 
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
-    <title>UNIMY CLUB</title>
-    <link rel="icon" type="image/png" href="img/unimy.jpg" />
-
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:300,400,600" />
-    <!-- https://fonts.google.com/specimen/Open+Sans -->
+    <title>ClubHub · Student Portal</title>
+    <link rel="icon" type="image/svg+xml" href="img/logo.svg" />
     <link rel="stylesheet" href="css/all.min.css" />
-    <!-- https://fontawesome.com/ -->
     <link rel="stylesheet" href="css/bootstrap.min.css" />
-    <!-- https://getbootstrap.com/ -->
-    <link rel="stylesheet" href="css/tooplate-style.css" />
-    <!--
-Tooplate 2111 Pro Line
-http://www.tooplate.com/view/2111-pro-line
--->
-    <?php
-        if(isset($_SESSION['login_msg']) && $_SESSION['login_msg'] != ""){
-            echo '<script> alert("' . $_SESSION['login_msg'] . '"); </script>';
-        }
-    ?>
+    <link rel="stylesheet" href="css/clubhub.css" />
+    <script>document.documentElement.classList.add('js');</script>
 </head>
 
-<body>
+<body id="home">
 
-    <!-- page header -->
-    <div class="container" id="home">
-        <div class="col-12 text-center">
-            <div class="tm-page-header">
-                <i class="fas fa-4x fa-desktop mr-4"></i>
-                <h1 class="d-inline-block text-uppercase">Unimy Club</h1>
-            </div>
-        </div>
-    </div>
-    <!-- navbar -->
-    <div class="tm-nav-section">
+    <!-- Navbar -->
+    <nav class="cb-nav" id="cbNav">
         <div class="container">
-            <div class="row">
-                <div class="col-12">
-                    <nav class="navbar navbar-expand-md navbar-light">
-                        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#tmMainNav"
-                            aria-controls="tmMainNav" aria-expanded="false" aria-label="Toggle navigation">
-                            <span class="navbar-toggler-icon"></span>
-                        </button>
-
-                        <div class="collapse navbar-collapse" id="tmMainNav">
-                            <ul class="navbar-nav mx-auto tm-navbar-nav">
-                                <li class="nav-item active">
-                                    <a class="nav-link" href="#home">Home <span class="sr-only">(current)</span></a>
-                                </li>
-                                <li class="nav-item">
-                                    <a class="nav-link" href="#features">Information</a>
-                                </li>
-                                <li class="nav-item">
-                                    <a class="nav-link" href="#activities">Activities</a>
-                                </li>
-                                <li class="nav-item">
-                                    <a class="nav-link" href="#company">Club</a>
-                                </li>
-                                <li class="nav-item">
-                                    <a class="nav-link" href="#contact">Contact</a>
-                                </li>
-                                <li class="nav-item">
-                                    <a class="nav-link external" href="https://www.unimy.edu.my/">UniMy</a>
-                                </li>
-                                <li class="nav-item"><a class="nav-link external" href="logout.php"
-                                        style="color:red; text-transform: uppercase;">Logout</a></li>
-
-                            </ul>
-                        </div>
-                    </nav>
-                </div>
-            </div>
+            <a class="cb-brand" href="#home"><img src="img/logo.svg" alt=""> ClubHub</a>
+            <button class="cb-burger" id="cbBurger" aria-label="Toggle navigation"><i class="fas fa-bars"></i></button>
+            <ul class="cb-nav-links" id="cbLinks">
+                <li><a href="#home">Home</a></li>
+                <li><a href="#profile">My Profile</a></li>
+                <li><a href="#activities">Activities</a></li>
+                <li><a href="#about">About</a></li>
+                <li><a href="#contact">Contact</a></li>
+                <li><a href="logout.php" class="cb-logout"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
+            </ul>
         </div>
-    </div>
+    </nav>
 
-    <!-- Video Banner -->
-    <section class="tm-banner-section" id="tmVideoSection">
-        <div class="container tm-banner-text-container">
-            <div class="row">
-                <div class="col-12">
-                    <header>
-                        <h2 class="tm-banner-title">University Malaysia of Computer Science & Engineering</h2>
-                        <!-- <p class="mx-auto tm-banner-subtitle">
-                            The video background has a parallax effect. This is fluid and
-                            full-width.
-                        </p> -->
-                    </header>
-                </div>
-            </div>
-        </div>
-
-        <!-- Video -->
-        <video id="hero-vid" autoplay="" loop="" muted>
+    <!-- Hero -->
+    <header class="cb-hero">
+        <video autoplay loop muted playsinline>
             <source src="videos/city-night-blur-01.mp4" type="video/mp4" />
-            Your browser does not support the video tag.
         </video>
-    </section>
-    <!-- Features -->
-    <div class="container tm-features-section" id="features">
-        <div class="row">
-            <div class="col-12">
-                <div class="tm-parallax">
-                    <header class="tm-parallax-header">
-                        <h2 class="">Student Information</h2>
-                    </header>
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-lg-7">
+                    <span class="cb-badge"><i class="fas fa-hand-sparkles"></i> Student Portal</span>
+                    <h1>Hi <?= e($firstName) ?>, <span>welcome back.</span></h1>
+                    <p class="lead">Everything about your clubs in one place: memberships, upcoming meetings and the people to contact.</p>
+                    <div class="cb-hero-actions">
+                        <a href="#activities" class="cb-btn cb-btn-primary"><i class="fas fa-calendar-alt"></i> View activities</a>
+                        <a href="#profile" class="cb-btn cb-btn-ghost"><i class="far fa-user"></i> My profile</a>
+                    </div>
+                    <div class="cb-hero-stats">
+                        <div><strong><?= count($myClubs) ?></strong><span>Clubs joined</span></div>
+                        <div><strong><?= count(array_filter($upcoming, function ($a) use ($myTypes) { return in_array($a['club_type'], $myTypes, true); })) ?></strong><span>Upcoming in your clubs</span></div>
+                        <div><strong><?= count(CLUBS) ?></strong><span>Clubs available</span></div>
+                    </div>
+                </div>
+                <div class="col-lg-5 mt-5 mt-lg-0">
+                    <div class="cb-next">
+                        <?php if ($next) { $c = CLUBS[$next['club_type']]; ?>
+                        <span class="cb-next-label"><i class="fas fa-bolt"></i> Next up in your clubs</span>
+                        <div class="cb-next-count" data-date="<?= date('Y-m-d', $next['ts']) ?>"><?= days_label($next['ts']) ?></div>
+                        <h3><?= e($next['club_content']) ?></h3>
+                        <p><i class="fas <?= fa5($c['icon']) ?>" style="color:<?= $c['color'] ?>"></i> <?= e($c['name']) ?></p>
+                        <p><i class="far fa-calendar"></i> <?= date('l, d M Y', $next['ts']) ?> · <?= e($next['club_time']) ?></p>
+                        <a href="ics.php?id=<?= (int)$next['club_id'] ?>" class="cb-btn cb-btn-ghost mt-2"><i class="far fa-calendar-plus"></i> Add to calendar</a>
+                        <?php } else { ?>
+                        <span class="cb-next-label"><i class="far fa-calendar"></i> Next up in your clubs</span>
+                        <h3>Nothing scheduled yet</h3>
+                        <p>When your clubs post a meeting or event, it will show up here.</p>
+                        <?php } ?>
+                    </div>
                 </div>
             </div>
         </div>
-        <div class="row tm-features-row">
-            <section class="col-md-6 col-sm-12 tm-feature-block">
-                <header class="tm-feature-header">
-                    <i class="fas fa-5x fa-anchor tm-feature-icon"></i>
-                    <h3 class="tm-feature-h">Details Information</h3>
-                </header>
+        <a href="#profile" class="cb-scroll-cue" aria-label="Scroll down"><i class="fas fa-chevron-down fa-lg"></i></a>
+    </header>
 
-                <table>
-                    <tr>
-                        <td style="border:1px solid black"><a style="color:Black; font-size:24px">&nbsp Name
-                                &nbsp</a></td>
-                        <td style="border:1px solid black"><a style="color:Blue; font-size:21px">&nbsp
-                                <?php echo $username_session; ?> &nbsp</a></td>
-                    </tr>
-                    <tr>
-                        <td style="border:1px solid black"><a style="color:Black; font-size:24px">&nbsp
-                                Student Id &nbsp</a></td>
-                        <td style="border:1px solid black"><a style="color:Blue; font-size:21px">&nbsp
-                                <?php echo $studentid_session; ?> &nbsp</a></td>
-                    </tr>
-                    <tr>
-                        <td style="border:1px solid black"><a style="color:Black; font-size:24px">&nbsp Student Email
-                                &nbsp</a></td>
-                        <td style="border:1px solid black"><a style="color:Blue; font-size:21px">&nbsp
-                                <?php echo $email_session; ?>
-                                &nbsp</a></td>
-                    </tr>
-                    <tr>
-                        <td style="border:1px solid black"><a style="color:Black; font-size:24px">&nbsp
-                                Phone No. &nbsp</a></td>
-                        <td style="border:1px solid black"><a style="color:Blue; font-size:21px">&nbsp
-                                <?php echo $contact_session; ?> &nbsp</a></td>
-                    </tr>
+    <!-- Profile -->
+    <section class="cb-section" id="profile">
+        <div class="container">
+            <div class="cb-section-head cb-reveal">
+                <span class="cb-badge"><i class="far fa-id-badge"></i> Profile</span>
+                <h2>Student information</h2>
+                <p>Your registered details and the clubs you're part of.</p>
+            </div>
 
-                </table>
-            </section>
-            <section class="col-md-6 col-sm-12 tm-feature-block">
-                <header class="tm-feature-header">
-                    <i class="fas fa-5x fa-atom tm-feature-icon"></i>
-                    <h3 class="tm-feature-h">Club Registered</h3>
-                </header>
-                <tr>
-                    <td style="border:1px solid black"><a style="color:Black; font-size:24px">
-                            List Club &nbsp</a></td>
-                    <td style="border:1px solid black"><a style="color:Blue; font-size:21px">&nbsp
-                            <li><?php echo $club_session; ?></li>
-                        </a></td>
-                </tr>
-            </section>
+            <div class="row">
+                <div class="col-lg-5 mb-4 cb-reveal">
+                    <div class="cb-card">
+                        <div class="cb-profile-head">
+                            <div class="cb-avatar"><?= e($initial) ?></div>
+                            <div>
+                                <h3><?= e($student['name_user']) ?></h3>
+                                <p>Member since <?= e(date('M Y', strtotime($student['created_at'] ?? 'now'))) ?></p>
+                            </div>
+                        </div>
+                        <ul class="cb-info-list">
+                            <li><i class="far fa-id-card"></i>
+                                <div><small>Student ID</small><span><?= e(strtoupper($student['studentid_user'])) ?></span></div>
+                            </li>
+                            <li><i class="far fa-envelope"></i>
+                                <div><small>Email</small><span><?= e($student['email_user']) ?></span></div>
+                            </li>
+                            <li><i class="fas fa-phone-alt"></i>
+                                <div class="flex-grow-1"><small>Phone</small>
+                                    <span id="phoneView"><?= e($student['phone_user']) ?>
+                                        <button type="button" class="cb-link" onclick="togglePhone(true)"><i class="fas fa-pen"></i> Edit</button></span>
+                                    <form method="post" action="account.php" id="phoneForm" class="cb-inline-form" hidden>
+                                        <?= csrf_field() ?><input type="hidden" name="action" value="phone">
+                                        <input type="tel" name="phone" id="phone" value="<?= e($student['phone_user']) ?>" maxlength="13" required aria-label="Phone number">
+                                        <button class="cb-btn cb-btn-primary cb-btn-sm">Save</button>
+                                        <button type="button" class="cb-link" onclick="togglePhone(false)">Cancel</button>
+                                    </form>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="col-lg-7 mb-4 cb-reveal">
+                    <div class="cb-card">
+                        <div class="d-flex justify-content-between align-items-start flex-wrap" style="gap:.75rem">
+                            <div>
+                                <div class="cb-card-title"><i class="fas fa-users"></i> My clubs</div>
+                                <div class="cb-card-sub">Clubs you registered for this semester.</div>
+                            </div>
+                            <button type="button" class="cb-btn cb-btn-soft" onclick="document.getElementById('clubDialog').showModal()"><i class="fas fa-sliders-h"></i> Manage clubs</button>
+                        </div>
+                        <div class="cb-chips">
+                            <?php if (!$myClubs) { ?>
+                                <span class="cb-empty">You haven't joined any clubs yet.</span>
+                            <?php } ?>
+                            <?php foreach ($myClubs as $k) { $c = club_by_keyword($k); ?>
+                                <span class="cb-chip"><i class="fas <?= fa5($c['icon'] ?? 'fa-users') ?>" style="background:<?= $c['color'] ?? '#6366f1' ?>"></i><?= e($c['name'] ?? $k) ?></span>
+                            <?php } ?>
+                        </div>
+
+                        <hr class="my-4">
+
+                        <div class="cb-card-title"><i class="fas fa-compass"></i> Explore other clubs</div>
+                        <div class="cb-card-sub">Tap a club to see its activities, or use Manage clubs to join.</div>
+                        <div class="cb-chips">
+                            <?php foreach (CLUBS as $type => $c) { if (in_array($type, $myTypes, true)) continue; ?>
+                                <a href="#activities" class="cb-chip cb-chip-link" data-filter-link="<?= $type ?>"><i class="fas <?= fa5($c['icon']) ?>" style="background:<?= $c['color'] ?>"></i><?= e($c['name']) ?></a>
+                            <?php } ?>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
-    </div>
+    </section>
 
-    <hr>
+    <!-- Manage clubs dialog -->
+    <dialog id="clubDialog" class="cb-dialog">
+        <form method="post" action="account.php">
+            <?= csrf_field() ?><input type="hidden" name="action" value="clubs">
+            <div class="cb-dialog-head">
+                <h3>Manage your clubs</h3>
+                <button type="button" class="cb-link" onclick="this.closest('dialog').close()" aria-label="Close"><i class="fas fa-times fa-lg"></i></button>
+            </div>
+            <p class="cb-card-sub mb-3">Tick the clubs you want to be part of.</p>
+            <div class="cb-dialog-grid">
+                <?php foreach (CLUBS as $type => $c) { ?>
+                <label class="cb-pick">
+                    <input type="checkbox" name="clubs[]" value="<?= e($c['keyword']) ?>" <?= in_array($type, $myTypes, true) ? 'checked' : '' ?>>
+                    <span><i class="fas <?= fa5($c['icon']) ?>" style="background:<?= $c['color'] ?>"></i><span><strong><?= e($c['name']) ?></strong><small><?= e($c['desc']) ?></small></span></span>
+                </label>
+                <?php } ?>
+            </div>
+            <div class="cb-dialog-foot">
+                <button type="button" class="cb-btn cb-btn-soft" onclick="this.closest('dialog').close()">Cancel</button>
+                <button class="cb-btn cb-btn-primary"><i class="fas fa-check"></i> Save clubs</button>
+            </div>
+        </form>
+    </dialog>
 
     <!-- Activities -->
-
-
-    <div class="container" id="activities">
-        <div class="row">
-            <div class="col-12">
-                <div class="tm-parallax">
-                    <header class="tm-parallax-header">
-                        <h2 class="">Club Activities</h2>
-                    </header>
-                </div>
+    <section class="cb-section alt" id="activities">
+        <div class="container">
+            <div class="cb-section-head cb-reveal">
+                <span class="cb-badge"><i class="far fa-calendar-alt"></i> What's on</span>
+                <h2>Club activities</h2>
+                <p>Upcoming meetings and events across all clubs.</p>
             </div>
-        </div>
 
-        <div class="row">
-            <?php
-            
-            $query = "SELECT * FROM club_activity WHERE club_type='esport' ORDER BY club_id ASC ";
-            $result = mysqli_query($conn,$query);
-
-            ?>
-
-            <?php while($row = mysqli_fetch_array($result)){?>
-            <div class="col-lg-6">
-                <div class="tm-activity-block">
-                    <div class="tm-activity-img-container">
-                        <img src="<?php echo $row['club_image'];?>" alt="Image" class="tm-activity-img" style="width:180px;height:180;" />
-                    </div>
-                    <div class="tm-activity-block-text">
-                        <h3 class="tm-text-blue">E-Sports Club</h3>
-                        <p class="text-content">
-                            <?php echo $row['club_content'];?>
-                        </p>
-                        <h4 class="tm-text-blue"> Activities</h4>
-                        <p class="text-content-2">
-                            <?php echo $row['club_content_2'];?>
-                        </p>
-                        <h4 class="tm-text-blue"> Meeting</h4>
-                        <p class="text-content-2">
-                            Date: <?php echo $new_date = date('d-m-Y', strtotime($row['club_date']));?>
-                            <br>
-                            Time: <?php echo $row['club_time'];?>
-
-                        </p>
-                        <h4 class="tm-text-blue"> Contact</h4>
-                        <p class="text-content-2">
-                            <?php echo $row['club_name'];?>, <?php echo $row['club_contact'];?>
-                        </p>
-                    </div>
-                </div>
+            <div class="cb-filters" role="toolbar" aria-label="Filter activities">
+                <button class="active" data-filter="all">All clubs</button>
+                <button data-filter="mine"><i class="fas fa-star"></i> My clubs</button>
+                <?php foreach (CLUBS as $type => $c) { ?>
+                <button data-filter="<?= $type ?>" style="--c:<?= $c['color'] ?>"><i class="fas <?= fa5($c['icon']) ?>"></i> <?= e($c['keyword']) ?></button>
+                <?php } ?>
             </div>
-            <?php } ?>
 
-            <?php
-            
-            $query = "SELECT * FROM club_activity WHERE club_type='cyber' ORDER BY club_id ASC ";
-            $result = mysqli_query($conn,$query);
-
-            ?>
-
-            <?php while($row = mysqli_fetch_array($result)){?>
-            <div class="col-lg-6">
-                <div class="tm-activity-block">
-                    <div class="tm-activity-img-container">
-                        <img src="<?php echo $row['club_image'];?>" alt="Image" class="tm-activity-img" style="width:180px;height:180;" />
-                    </div>
-                    <div class="tm-activity-block-text">
-                        <h3 class="tm-text-blue">Cybersecurity Club</h3>
-                        <p class="text-content">
-                            <?php echo $row['club_content'];?>
-                        </p>
-                        <h4 class="tm-text-blue"> Activities</h4>
-                        <p class="text-content-2">
-                            <?php echo $row['club_content_2'];?>
-                        </p>
-                        <h4 class="tm-text-blue"> Meeting</h4>
-                        <p class="text-content-2">
-                            Date: <?php echo $new_date = date('d-m-Y', strtotime($row['club_date']));?>
-                            <br>
-                            Time: <?php echo $row['club_time'];?>
-                        </p>
-                        <h4 class="tm-text-blue"> Contact</h4>
-                        <p class="text-content-2">
-                            <?php echo $row['club_name'];?>, <?php echo $row['club_contact'];?>
-                        </p>
-                    </div>
-                </div>
+            <div class="row" id="actGrid">
+                <?php foreach ($upcoming as $a) activity_card($a, in_array($a['club_type'], $myTypes, true), false); ?>
+                <?php foreach ($past as $a) activity_card($a, in_array($a['club_type'], $myTypes, true), true); ?>
             </div>
-            <?php } ?>
-            <?php
-            
-            $query = "SELECT * FROM club_activity WHERE club_type='photo' ORDER BY club_id ASC ";
-            $result = mysqli_query($conn,$query) ;
-
-            ?>
-
-            <?php while($row = mysqli_fetch_array($result)){?>
-            <div class="col-lg-6">
-                <div class="tm-activity-block">
-                    <div class="tm-activity-img-container">
-                        <img src="<?php echo $row['club_image'];?>" alt="Image" class="tm-activity-img" style="width:180px;height:180;" />
-                    </div>
-                    <div class="tm-activity-block-text">
-                        <h3 class="tm-text-blue">Photography Club</h3>
-                        <p class="text-content">
-                            <?php echo $row['club_content'];?>
-                        </p>
-                        <h4 class="tm-text-blue"> Activities</h4>
-                        <p class="text-content-2">
-                            <?php echo $row['club_content_2'];?>
-                        </p>
-                        <h4 class="tm-text-blue"> Meeting</h4>
-                        <p class="text-content-2">
-                            Date: <?php echo $new_date = date('d-m-Y', strtotime($row['club_date']));?>
-                            <br>
-                            Time: <?php echo $row['club_time'];?>
-                        </p>
-                        <h4 class="tm-text-blue"> Contact</h4>
-                        <p class="text-content-2">
-                            <?php echo $row['club_name'];?>, <?php echo $row['club_contact'];?>
-                        </p>
-                    </div>
-                </div>
-            </div>
-            <?php } ?>
-            <?php
-            
-            $query = "SELECT * FROM club_activity WHERE club_type='japan' ORDER BY club_id ASC ";
-            $result = mysqli_query($conn,$query);
-
-            ?>
-
-            <?php while($row = mysqli_fetch_array($result)){?>
-            <div class="col-lg-6">
-                <div class="tm-activity-block">
-                    <div class="tm-activity-img-container">
-                        <img src="<?php echo $row['club_image'];?>" alt="Image" class="tm-activity-img" style="width:180px;height:180;" />
-                    </div>
-                    <div class="tm-activity-block-text">
-                        <h3 class="tm-text-blue">Japananime Society</h3>
-                        <p class="text-content">
-                            <?php echo $row['club_content'];?>
-                        </p>
-                        <h4 class="tm-text-blue"> Activities</h4>
-                        <p class="text-content-2">
-                            <?php echo $row['club_content_2'];?>
-                        </p>
-                        <h4 class="tm-text-blue"> Meeting</h4>
-                        <p class="text-content-2">
-                            Date: <?php echo $new_date = date('d-m-Y', strtotime($row['club_date']));?>
-                            <br>
-                            Time: <?php echo $row['club_time'];?>
-                        </p>
-                        <h4 class="tm-text-blue"> Contact</h4>
-                        <p class="text-content-2">
-                            <?php echo $row['club_name'];?>, <?php echo $row['club_contact'];?>
-                        </p>
-                    </div>
-                </div>
-            </div>
-            <?php } ?>
-            <?php
-            
-            $query = "SELECT * FROM club_activity WHERE club_type='advent' ORDER BY club_id ASC ";
-            $result = mysqli_query($conn,$query);
-
-            ?>
-
-            <?php while($row = mysqli_fetch_array($result)){?>
-            <div class="col-lg-6">
-                <div class="tm-activity-block">
-                    <div class="tm-activity-img-container">
-                        <img src="<?php echo $row['club_image'];?>" alt="Image" class="tm-activity-img" style="width:180px;height:180;" />
-                    </div>
-                    <div class="tm-activity-block-text">
-                        <h3 class="tm-text-blue">Adventurous Recreational Club</h3>
-                        <p class="text-content">
-                            <?php echo $row['club_content'];?>
-                        </p>
-                        <h4 class="tm-text-blue"> Activities</h4>
-                        <p class="text-content-2">
-                            <?php echo $row['club_content_2'];?>
-                        </p>
-                        <h4 class="tm-text-blue"> Meeting</h4>
-                        <p class="text-content-2">
-                            Date: <?php echo $new_date = date('d-m-Y', strtotime($row['club_date']));?>
-                            <br>
-                            Time: <?php echo $row['club_time'];?>
-                        </p>
-                        <h4 class="tm-text-blue"> Contact</h4>
-                        <p class="text-content-2">
-                            <?php echo $row['club_name'];?>, <?php echo $row['club_contact'];?>
-                        </p>
-                    </div>
-                </div>
-            </div>
-            <?php } ?>
-            <?php
-            
-            $query = "SELECT * FROM club_activity WHERE club_type='music' ORDER BY club_id ASC ";
-            $result = mysqli_query($conn,$query);
-
-            ?>
-
-            <?php while($row = mysqli_fetch_array($result)){?>
-            <div class="col-lg-6">
-                <div class="tm-activity-block">
-                    <div class="tm-activity-img-container">
-                        <img src="<?php echo $row['club_image'];?>" alt="Image" class="tm-activity-img" style="width:180px;height:180;" />
-                    </div>
-                    <div class="tm-activity-block-text">
-                        <h3 class="tm-text-blue">Music Club</h3>
-                        <p class="text-content">
-                            <?php echo $row['club_content'];?>
-                        </p>
-                        <h4 class="tm-text-blue"> Activities</h4>
-                        <p class="text-content-2">
-                            <?php echo $row['club_content_2'];?>
-                        </p>
-                        <h4 class="tm-text-blue"> Meeting</h4>
-                        <p class="text-content-2">
-                            Date: <?php echo $new_date = date('d-m-Y', strtotime($row['club_date']));?>
-                            <br>
-                            Time: <?php echo $row['club_time'];?>
-                        </p>
-                        <h4 class="tm-text-blue"> Contact</h4>
-                        <p class="text-content-2">
-                            <?php echo $row['club_name'];?>, <?php echo $row['club_contact'];?>
-                        </p>
-                    </div>
-                </div>
-            </div>
-            <?php } ?>
-            <?php
-            
-            $query = "SELECT * FROM club_activity WHERE club_type='biztech' ORDER BY club_id ASC ";
-            $result = mysqli_query($conn,$query);
-
-            ?>
-
-            <?php while($row = mysqli_fetch_array($result)){?>
-            <div class="col-lg-6">
-                <div class="tm-activity-block">
-                    <div class="tm-activity-img-container">
-                        <img src="<?php echo $row['club_image'];?>" alt="Image" class="tm-activity-img" style="width:180px;height:180;" />
-                    </div>
-                    <div class="tm-activity-block-text">
-                        <h3 class="tm-text-blue">Biztech Club</h3>
-                        <p class="text-content">
-                            <?php echo $row['club_content'];?>
-                        </p>
-                        <h4 class="tm-text-blue"> Activities</h4>
-                        <p class="text-content-2">
-                            <?php echo $row['club_content_2'];?>
-                        </p>
-                        <h4 class="tm-text-blue"> Meeting</h4>
-                        <p class="text-content-2">
-                            Date: <?php echo $new_date = date('d-m-Y', strtotime($row['club_date']));?>
-                            <br>
-                            Time: <?php echo $row['club_time'];?>
-                        </p>
-                        <h4 class="tm-text-blue"> Contact</h4>
-                        <p class="text-content-2">
-                            <?php echo $row['club_name'];?>, <?php echo $row['club_contact'];?>
-                        </p>
-                    </div>
-                </div>
-            </div>
-            <?php } ?>
-            <?php
-            
-            $query = "SELECT * FROM club_activity WHERE club_type='inge' ORDER BY club_id ASC ";
-            $result = mysqli_query($conn,$query);
-
-            ?>
-
-            <?php while($row = mysqli_fetch_array($result)){?>
-            <div class="col-lg-6">
-                <div class="tm-activity-block">
-                    <div class="tm-activity-img-container">
-                        <img src="<?php echo $row['club_image'];?>" alt="Image" class="tm-activity-img" style="width:180px;height:180;" />
-                    </div>
-                    <div class="tm-activity-block-text">
-                        <h3 class="tm-text-blue">Ingenieurs Club</h3>
-                        <p class="text-content">
-                            <?php echo $row['club_content'];?>
-                        </p>
-                        <h4 class="tm-text-blue"> Activities</h4>
-                        <p class="text-content-2">
-                            <?php echo $row['club_content_2'];?>
-                        </p>
-                        <h4 class="tm-text-blue"> Meeting</h4>
-                        <p class="text-content-2">
-                            Date: <?php echo $new_date = date('d-m-Y', strtotime($row['club_date']));?>
-                            <br>
-                            Time: <?php echo $row['club_time'];?>
-                        </p>
-                        <h4 class="tm-text-blue"> Contact</h4>
-                        <p class="text-content-2">
-                            <?php echo $row['club_name'];?>, <?php echo $row['club_contact'];?>
-                        </p>
-                    </div>
-                </div>
-            </div>
+            <p class="text-center cb-empty" id="actEmpty" hidden>No activities for this club yet.</p>
+            <?php if ($past) { ?>
+            <div class="text-center"><button class="cb-btn cb-btn-soft" id="togglePast"><i class="fas fa-history"></i> Show past activities (<?= count($past) ?>)</button></div>
             <?php } ?>
         </div>
-    </div>
+    </section>
 
-    <hr>
-
-    <section class="container tm-company-section" id="company">
-        <div class="row">
-            <div class="col-xl-9 col-lg-8 col-md-12 tm-company-left">
-                <div class="tm-company-about">
-                    <div class="tm-company-img-container">
-                        <img src="img/img-05.jpg" alt="Image" />
-                    </div>
-                    <div class="tm-company-about-text">
-                        <header>
-                            <h2 class="tm-company-about-header">About Us</h2>
-                        </header>
-                        <p>
-                            The UNIMY community is driven by a shared purpose: to create a better future through
-                            technology, education, research and innovation. We are made of creative and inventive people
-                            who know how to enjoy life yet find the improvements that need to occur, using our
-                            imagination to create things to improve people’s lives overall.
-                        </p>
-                        <p class="mb-4">
-                            Our motto is The Future Begins at UNIMY signifying the forward-looking nature of using
-                            technology for advancing human kind.
-                        </p>
-
-                        <!-- <a href="#" class="btn tm-btn tm-float-right">Read More</a> -->
-                    </div>
+    <!-- About -->
+    <section class="cb-section cb-about" id="about">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-lg-6 mb-5 mb-lg-0 cb-reveal">
+                    <div class="cb-about-img"><img src="img/img-05.jpg" alt=""></div>
                 </div>
-            </div>
-            <div class="col-xl-9 col-lg-4 col-md-12 tm-company-right  ml-lg-auto mr-lg-0">
-                <div class="tm-company-right-inner">
-                    <ul class="nav nav-tabs" id="tmCompanyTab" role="tablist">
-                        <li class="nav-item">
-                            <a class="nav-link tm-nav-link-border-right active" id="vision-tab" data-toggle="tab"
-                                href="#vision" role="tab" aria-controls="vision" aria-selected="true">Vision</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link tm-no-border-right" id="mission-tab" data-toggle="tab" href="#mission"
-                                role="tab" aria-controls="mission" aria-selected="false">Mission</a>
-                        </li>
-                    </ul>
-                    <div class="tab-content" id="tmTabContent">
-                        <div class="tab-pane fade show active" id="vision" role="tabpanel" aria-labelledby="vision-tab">
-                            <p>
-                                To be a preeminent digital technology university.
-                            </p>
+                <div class="col-lg-6 pl-lg-5 cb-reveal">
+                    <span class="cb-badge"><i class="fas fa-info-circle"></i> About us</span>
+                    <h2>Built for students, run by students.</h2>
+                    <p>Our club community is driven by a shared purpose: to help every student discover their passions,
+                        build friendships and grow beyond the classroom through activities, events and teamwork.</p>
+                    <p>Whether you love technology, the arts, the outdoors or business, there's a club where you belong.</p>
 
-                        </div>
-                        <div class="tab-pane fade" id="mission" role="tabpanel" aria-labelledby="mission-tab">
-                            <p>
-                                To develop highly sought-after graduates in a vibrant digital-centric environment that
-                                promotes innovation and breakthrough solutions using accelerating digital technologies.
-                            </p>
-
-                        </div>
+                    <div class="cb-tabs" role="tablist">
+                        <button class="active" data-tab="vision" role="tab">Vision</button>
+                        <button data-tab="mission" role="tab">Mission</button>
+                    </div>
+                    <div class="cb-tab-pane active" id="vision">
+                        To build a vibrant, inclusive campus community where every student finds a place to belong.
+                    </div>
+                    <div class="cb-tab-pane" id="mission">
+                        To provide meaningful activities that develop leadership, creativity and lifelong friendships
+                        among our members.
                     </div>
                 </div>
             </div>
         </div>
     </section>
-    <br><br>
-    <hr>
+
     <!-- Contact -->
-    <section class="container tm-contact-section" id="contact">
-        <div class="row">
-            <div class="col-xl-5 col-lg-6 col-md-12 tm-contact-left">
-                <div class="tm-contact-form-container ml-auto mr-0">
-                    <header>
-                        <h2 class="tm-contact-header">Contact Us</h2>
-                    </header>
-                    <!-- <form action="index.html" class="tm-contact-form" method="POST"> -->
-                    <div class="form-group">
-                        <a style="color:blue; font-size:20px;">Phone Number: </a> +6 017-6768937
-                        <br><br>
-                        <a style="color:blue;font-size:20px;"> Email:</a> enquiry@unimy.edu.my
-                    </div>
-                    <!-- <div class="form-group">
-                        <a class="form-control"> Email: unimy@gmail.com</a>
-                    </div> -->
-                    <!-- <div class="form-group">
-                            <textarea rows="5" id="contact_message" name="contact_message" class="form-control"
-                                placeholder="Message" required></textarea>
-                        </div>
-                        <div class="tm-text-right">
-                            <button type="submit" class="btn tm-btn tm-btn-big">
-                                Send It
-                            </button>
-                        </div> -->
-                    <!-- </form> -->
-                </div>
+    <section class="cb-section alt" id="contact">
+        <div class="container">
+            <div class="cb-section-head cb-reveal">
+                <span class="cb-badge"><i class="far fa-comments"></i> Get in touch</span>
+                <h2>Contact us</h2>
+                <p>Questions about clubs or activities? We're happy to help.</p>
             </div>
-            <div class="col-xl-7 col-lg-6 col-md-12 tm-contact-right">
-                <div class="tm-contact-figure-block">
-                    <figure class="d-inline-block">
-                        <iframe
-                            src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d63756.410690434896!2d101.67307600494124!3d2.8809540353037932!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x31cdb701bb00b453%3A0xc4d06be31fdd1a5!2sUniversity%20Malaysia%20of%20Computer%20Science%20%26%20Engineering%20(UNIMY)!5e0!3m2!1sms!2smy!4v1624190620289!5m2!1sms!2smy"
-                            width="600" height="450" style="border:0;" allowfullscreen="" loading="lazy"></iframe>
-                        <figcaption class="tm-contact-figcaption">
-                            <b>University Malaysia of Computer Science & Engineering (UNIMY)</b><br>Block 12, Star
-                            Central,
-                            Lingkaran Cyber Point Timur, 63000 Cyberjaya, Selangor.
-                        </figcaption>
-                    </figure>
+            <div class="row">
+                <div class="col-md-4 mb-4 cb-reveal">
+                    <div class="cb-card cb-contact-card"><i class="fas fa-phone-alt"></i>
+                        <div><h4>Phone</h4><p>+00 000-000 0000</p></div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-4 cb-reveal">
+                    <div class="cb-card cb-contact-card"><i class="far fa-envelope"></i>
+                        <div><h4>Email</h4><p>clubs@example.com</p></div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-4 cb-reveal">
+                    <div class="cb-card cb-contact-card"><i class="fas fa-map-marker-alt"></i>
+                        <div><h4>Office</h4><p>Student Affairs Office, Main Campus</p></div>
+                    </div>
                 </div>
             </div>
         </div>
     </section>
-    <footer class="container tm-footer">
-        <div class="row tm-footer-row">
-            <p class="col-md-10 col-sm-12 mb-0">
-                Copyright &copy; UNIMY
-            </p>
-            <div class="col-md-2 col-sm-12 scrolltop">
-                <div class="scroll icon"><i class="fa fa-4x fa-angle-up"></i></div>
-            </div>
+
+    <footer class="cb-footer">
+        <div class="container">
+            <a class="cb-brand" href="#home"><img src="img/logo.svg" alt=""> ClubHub</a>
+            <span>&copy; <?= date('Y') ?> ClubHub &middot; Club Registration System</span>
         </div>
     </footer>
 
-    <script src="js/jquery-1.9.1.min.js"></script>
-    <!-- Single Page Nav plugin works with this version of jQuery -->
-    <script src="js/jquery.singlePageNav.min.js"></script>
-    <script src="js/bootstrap.min.js"></script>
+    <button class="cb-to-top" id="cbTop" aria-label="Back to top"><i class="fas fa-arrow-up"></i></button>
+    <div class="cb-toast-stack">
+        <?php foreach ($flashes as $f) { ?>
+        <div class="cb-toast<?= $f['type'] === 'error' ? ' error' : '' ?>"><i class="fas <?= $f['type'] === 'error' ? 'fa-exclamation-circle' : 'fa-check-circle' ?>"></i><span><?= e($f['message']) ?></span></div>
+        <?php } ?>
+    </div>
+
     <script>
-    /**
-     * detect IE
-     * returns version of IE or false, if browser is not Internet Explorer
-     */
-    function detectIE() {
-        var ua = window.navigator.userAgent;
-
-        var msie = ua.indexOf("MSIE ");
-        if (msie > 0) {
-            // IE 10 or older => return version number
-            return parseInt(ua.substring(msie + 5, ua.indexOf(".", msie)), 10);
-        }
-
-        var trident = ua.indexOf("Trident/");
-        if (trident > 0) {
-            // IE 11 => return version number
-            var rv = ua.indexOf("rv:");
-            return parseInt(ua.substring(rv + 3, ua.indexOf(".", rv)), 10);
-        }
-
-        // var edge = ua.indexOf('Edge/');
-        // if (edge > 0) {
-        //     // Edge (IE 12+) => return version number
-        //     return parseInt(ua.substring(edge + 5, ua.indexOf('.', edge)), 10);
-        // }
-
-        // other browser
-        return false;
+    function togglePhone(edit) {
+        document.getElementById('phoneView').hidden = edit;
+        document.getElementById('phoneForm').hidden = !edit;
+        if (edit) document.getElementById('phone').focus();
     }
 
-    function setVideoHeight() {
-        const videoRatio = 1920 / 1080;
-        const minVideoWidth = 400 * videoRatio;
-        let secWidth = 0,
-            secHeight = 0;
+    (function() {
+        var nav = document.getElementById('cbNav');
+        var top = document.getElementById('cbTop');
+        var links = document.getElementById('cbLinks');
 
-        secWidth = videoSec.width();
-        secHeight = videoSec.height();
-
-        secHeight = secWidth / 2.13;
-
-        if (secHeight > 600) {
-            secHeight = 600;
-        } else if (secHeight < 400) {
-            secHeight = 400;
+        function onScroll() {
+            var y = window.scrollY;
+            nav.classList.toggle('scrolled', y > 40);
+            top.classList.toggle('show', y > 500);
+            var current = 'home';
+            document.querySelectorAll('section[id]').forEach(function(s) {
+                if (s.getBoundingClientRect().top < 120) current = s.id;
+            });
+            links.querySelectorAll('a[href^="#"]').forEach(function(a) {
+                a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+            });
         }
+        window.addEventListener('scroll', onScroll, { passive: true });
+        onScroll();
 
-        if (secWidth > minVideoWidth) {
-            $("video").width(secWidth);
-        } else {
-            $("video").width(minVideoWidth);
-        }
+        document.getElementById('cbBurger').addEventListener('click', function() { links.classList.toggle('open'); });
+        links.querySelectorAll('a').forEach(function(a) { a.addEventListener('click', function() { links.classList.remove('open'); }); });
+        top.addEventListener('click', function() { window.scrollTo({ top: 0, behavior: 'smooth' }); });
 
-        videoSec.height(secHeight);
-    }
-
-    // Parallax function
-    // https://codepen.io/roborich/pen/wpAsm
-    var background_image_parallax = function($object, multiplier) {
-        multiplier = typeof multiplier !== "undefined" ? multiplier : 0.5;
-        multiplier = 1 - multiplier;
-        var $doc = $(document);
-        $object.css({
-            "background-attatchment": "fixed"
-        });
-        $(window).scroll(function() {
-            var from_top = $doc.scrollTop(),
-                bg_css = "center " + multiplier * from_top + "px";
-            $object.css({
-                "background-position": bg_css
+        // Vision / mission tabs
+        document.querySelectorAll('.cb-tabs button').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.cb-tabs button').forEach(function(b) { b.classList.remove('active'); });
+                document.querySelectorAll('.cb-tab-pane').forEach(function(p) { p.classList.remove('active'); });
+                btn.classList.add('active');
+                document.getElementById(btn.dataset.tab).classList.add('active');
             });
         });
-    };
 
-    $(window).scroll(function() {
-        if ($(this).scrollTop() > 50) {
-            $(".scrolltop:hidden")
-                .stop(true, true)
-                .fadeIn();
+        // Activity filters
+        var filter = 'all', showPast = false;
+        var cols = document.querySelectorAll('.cb-act-col');
+        function applyFilter() {
+            var shown = 0;
+            cols.forEach(function(col) {
+                var ok = filter === 'all' || (filter === 'mine' ? col.dataset.mine === '1' : col.dataset.club === filter);
+                if (col.dataset.past === '1' && !showPast) ok = false;
+                col.hidden = !ok;
+                if (ok) shown++;
+            });
+            document.getElementById('actEmpty').hidden = shown > 0;
+            document.querySelectorAll('.cb-filters button').forEach(function(b) { b.classList.toggle('active', b.dataset.filter === filter); });
+        }
+        document.querySelectorAll('.cb-filters button').forEach(function(b) {
+            b.addEventListener('click', function() { filter = b.dataset.filter; applyFilter(); });
+        });
+        document.querySelectorAll('[data-filter-link]').forEach(function(a) {
+            a.addEventListener('click', function() { filter = a.dataset.filterLink; applyFilter(); });
+        });
+        var tp = document.getElementById('togglePast');
+        if (tp) tp.addEventListener('click', function() {
+            showPast = !showPast;
+            tp.innerHTML = showPast ? '<i class="fas fa-eye-slash"></i> Hide past activities' : '<i class="fas fa-history"></i> Show past activities (<?= count($past) ?>)';
+            applyFilter();
+        });
+        applyFilter();
+
+        // Reveal on scroll
+        if ('IntersectionObserver' in window) {
+            var io = new IntersectionObserver(function(entries) {
+                entries.forEach(function(en) { if (en.isIntersecting) { en.target.classList.add('in'); io.unobserve(en.target); } });
+            }, { threshold: 0.12 });
+            document.querySelectorAll('.cb-reveal').forEach(function(el) { io.observe(el); });
         } else {
-            $(".scrolltop")
-                .stop(true, true)
-                .fadeOut();
+            document.querySelectorAll('.cb-reveal').forEach(function(el) { el.classList.add('in'); });
         }
 
-        // Make sticky header
-        if ($(this).scrollTop() > 158) {
-            $(".tm-nav-section").addClass("sticky");
-        } else {
-            $(".tm-nav-section").removeClass("sticky");
-        }
-    });
-
-    let videoSec;
-
-    $(function() {
-
-        if (detectIE()) {
-            alert(
-                "Please use the latest version of Edge, Chrome, or Firefox for best browsing experience."
-            );
-        }
-
-        const mainNav = $("#tmMainNav");
-        mainNav.singlePageNav({
-            filter: ":not(.external)",
-            offset: $(".tm-nav-section").outerHeight(),
-            updateHash: true,
-            beforeStart: function() {
-                mainNav.removeClass("show");
-            }
+        // Toasts
+        document.querySelectorAll('.cb-toast').forEach(function(t, i) {
+            setTimeout(function() { t.classList.add('show'); }, 300 + i * 150);
+            setTimeout(function() { t.classList.remove('show'); }, 5000 + i * 150);
         });
 
-        videoSec = $("#tmVideoSection");
-
-        // Adjust height of video when window is resized
-        $(window).resize(function() {
-            setVideoHeight();
-        });
-
-        setVideoHeight();
-
-        $(window).on("load scroll resize", function() {
-            var scrolled = $(this).scrollTop();
-            var vidHeight = $("#hero-vid").height();
-            var offset = vidHeight * 0.6;
-            var scrollSpeed = 0.25;
-            var windowWidth = window.innerWidth;
-
-            if (windowWidth < 768) {
-                scrollSpeed = 0.1;
-                offset = vidHeight * 0.5;
-            }
-
-            $("#hero-vid").css(
-                "transform",
-                "translate3d(-50%, " + -(offset + scrolled * scrollSpeed) + "px, 0)"
-            ); // parallax (25% scroll rate)
-            
-        });
-
-        // Parallax image background
-        background_image_parallax($(".tm-parallax"), 0.4);
-
-        // Back to top
-        $(".scroll").click(function() {
-            $("html,body").animate({
-                    scrollTop: $("#home").offset().top
-                },
-                "1000"
-            );
-            return false;
-        });
-    });
+        // Close the dialog by clicking the backdrop
+        var dlg = document.getElementById('clubDialog');
+        dlg.addEventListener('click', function(ev) { if (ev.target === dlg) dlg.close(); });
+    })();
     </script>
 </body>
 

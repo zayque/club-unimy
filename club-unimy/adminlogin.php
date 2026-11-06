@@ -1,67 +1,36 @@
 <?php
+require_once __DIR__ . '/lib/app.php';
 
-session_start();
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    redirect('admin.php');
+}
+csrf_check();
 
-if (isset($_POST['submit'])) {
-	
-	include 'config-mysqli.php';
+$studentid = trim($_POST['studentid'] ?? '');
+$pwd = (string)($_POST['pwd'] ?? '');
+$_SESSION['login_old'] = $studentid;
 
-	$uid = stripslashes($_POST['uid']);
-	$studentid = stripslashes($_POST['studentid']);
-	$pwd = stripslashes($_POST['pwd']);
-
-	//Error handlers
-	//Check if inputs are empty
-	if (empty($studentid) || empty($pwd)) {
-			header("Location: admin.php?login=empty");
-			exit();
-	} 
-	else {
-		$sql = "SELECT * FROM adminlogin WHERE student_id='$studentid' OR user_email='$uid' ";
-		$result = mysqli_query($conn, $sql);
-		$resultCheck = mysqli_num_rows($result);
-		var_dump($resultCheck);
-
-		if($resultCheck != '1') {
-			echo "<script>alert('Username/Password Wrong');</script>";
-			echo "<script>window.location='admin.php?login=errormsg';</script>";
-
-			exit();
-		} 
-		else {
-			if ($row = mysqli_fetch_assoc($result)) {
-				//De-hashing the password
-				$hashedPwdCheck = password_verify($pwd, $row['user_pwd']);
-				if ($hashedPwdCheck == false) {
-					echo 'false';
-					echo "<script>alert('Username/Password Wrong');</script>";
-					echo "<script>window.location='admin.php?login=errormsg';</script>";
-
-					exit();
-				} 
-				else {
-					//Log in the user here
-					$_SESSION['u_id'] = $row['user_id'];
-					$_SESSION['u_first'] = $row['user_first'];
-					$_SESSION['u_last'] = $row['user_last'];
-					$_SESSION['u_email'] = $row['user_email'];
-					$_SESSION['u_uid'] = $row['user_uid'];
-					$_SESSION['u_studentid'] = $row['student_id'];
-					
-					echo "<script>alert('Selamat Datang ke Laman Admin!');</script>";
-					echo "<script>window.location='dashboard.php?login=success';</script>";
-
-					
-					
-					exit();
-				}
-				
-			}
-		}
-	}
-} 	
-else {
-	header("Location: admin.php?login=error");
-	exit();
+if ($studentid === '' || $pwd === '') {
+    flash('Enter your student ID and password.', 'error');
+    redirect('admin.php');
 }
 
+// Accept either the student ID or the username
+$admin = row("SELECT * FROM adminlogin WHERE student_id = ? OR user_uid = ? LIMIT 1", [$studentid, $studentid]);
+
+if (!$admin || !password_verify($pwd, $admin['user_pwd'])) {
+    flash('That student ID or password is incorrect.', 'error');
+    redirect('admin.php');
+}
+
+session_regenerate_id(true);
+unset($_SESSION['login_old']);
+$_SESSION['u_id']        = $admin['user_id'] ?? null;
+$_SESSION['u_first']     = $admin['user_first'];
+$_SESSION['u_last']      = $admin['user_last'];
+$_SESSION['u_email']     = $admin['user_email'];
+$_SESSION['u_uid']       = $admin['user_uid'];
+$_SESSION['u_studentid'] = $admin['student_id'];
+
+flash('Welcome back, ' . $admin['user_first'] . '!');
+redirect('dashboard.php');

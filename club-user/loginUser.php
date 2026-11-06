@@ -1,134 +1,117 @@
 <?php
+require_once __DIR__ . '/lib.php';
 
-    include('login.php'); // Includes Login Script
-    if(isset($_SESSION['login_user'])){
-    header("location: index.php"); // Redirecting To Profile Page
+if (current_student()) {
+    redirect('index.php');
+}
+
+$error = '';
+$email = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_check();
+    $email = strtolower(trim($_POST['email_user'] ?? ''));
+    $studentid = strtoupper(trim($_POST['studentid_user'] ?? ''));
+
+    if ($email === '' || $studentid === '') {
+        $error = 'Enter your email and student ID.';
+    } else {
+        $s = row("SELECT * FROM user WHERE LOWER(email_user) = ? AND UPPER(studentid_user) = ? LIMIT 1", [$email, $studentid]);
+        if (!$s) {
+            $error = "We couldn't find a student with that email and student ID.";
+        } else {
+            session_regenerate_id(true);
+            $_SESSION['login_user'] = $s['email_user'];
+            flash('Welcome back, ' . explode(' ', trim($s['name_user']))[0] . '!');
+            redirect('index.php');
+        }
     }
+}
 
+$flashes = take_flashes();
 ?>
 <!DOCTYPE html>
 <html lang="en">
 
 <head>
-    <title>Unimy Club</title>
     <meta charset="UTF-8">
-
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <!--===============================================================================================-->
-    <link rel="icon" type="image/png" href="img/unimy.jpg" />
-    <!--===============================================================================================-->
-    <link rel="stylesheet" type="text/css" href="vendor/bootstrap/css/bootstrap.min.css">
-    <!--===============================================================================================-->
-    <link rel="stylesheet" type="text/css" href="fonts/font-awesome-4.7.0/css/font-awesome.min.css">
-    <!--===============================================================================================-->
-    <link rel="stylesheet" type="text/css" href="vendor/animate/animate.css">
-    <!--===============================================================================================-->
-    <link rel="stylesheet" type="text/css" href="vendor/css-hamburgers/hamburgers.min.css">
-    <!--===============================================================================================-->
-    <link rel="stylesheet" type="text/css" href="vendor/select2/select2.min.css">
-    <!--===============================================================================================-->
-    <link rel="stylesheet" type="text/css" href="css/util.css">
-    <link rel="stylesheet" type="text/css" href="css/main.css">
-    <!--===============================================================================================-->
-
-    <?php
-        if(isset($_SESSION['login_msg']) && $_SESSION['login_msg'] != ""){
-            echo '<script> alert("' . $_SESSION['login_msg'] . '"); </script>';
-           //$_SESSION['login_msg'] = "";
-        }
-    ?>
-
+    <title>Student Login · ClubHub</title>
+    <link rel="icon" type="image/svg+xml" href="img/logo.svg" />
+    <link rel="stylesheet" href="css/all.min.css">
+    <link rel="stylesheet" href="css/clubhub.css">
 </head>
 
 <body>
 
-    <div class="limiter">
-        <div class="container-login100">
-            <div class="wrap-login100">
-                <div class="login100-pic js-tilt" data-tilt>
-                    <img src="images/unimy.jpg" alt="IMG" style="border-radius:10px">
+    <div class="cb-login">
+        <aside class="cb-login-art">
+            <a class="cb-brand" href="loginUser.php"><img src="img/logo.svg" alt=""> ClubHub</a>
+
+            <div>
+                <h1>Your campus life,<br><span>all in one place.</span></h1>
+                <p>Check your club memberships, upcoming meetings and activities — and stay connected with your community.</p>
+            </div>
+
+            <div class="cb-floating">
+                <?php foreach (array_slice(CLUBS, 0, 6) as $c) { ?>
+                <span><i class="fas <?= str_replace('fa-shield', 'fa-shield-alt', $c['icon']) ?>"></i> <?= e($c['keyword']) ?></span>
+                <?php } ?>
+            </div>
+        </aside>
+
+        <main class="cb-login-form-wrap">
+            <form class="cb-login-form" action="" method="POST">
+                <?= csrf_field() ?>
+                <span class="cb-badge"><i class="fas fa-user-graduate"></i> Student Portal</span>
+                <h2>Sign in</h2>
+                <p>Use your registered email and student ID.</p>
+
+                <?php if ($error) { ?>
+                <div class="cb-alert cb-alert-error"><i class="fas fa-exclamation-circle"></i> <?= e($error) ?></div>
+                <?php } ?>
+                <?php foreach ($flashes as $f) { ?>
+                <div class="cb-alert <?= $f['type'] === 'error' ? 'cb-alert-error' : '' ?>"><i class="fas fa-check-circle"></i> <?= e($f['message']) ?></div>
+                <?php } ?>
+
+                <div class="cb-field">
+                    <label for="email_user">Email</label>
+                    <div class="cb-input">
+                        <i class="far fa-envelope"></i>
+                        <input type="email" id="email_user" name="email_user" placeholder="name@example.com" required autocomplete="email"
+                            value="<?= e($email) ?>">
+                    </div>
                 </div>
 
-                <form class="login100-form validate-form" action="" method="POST">
-                    <span class="login100-form-title">
-                        Student Login
-                    </span>
-
-                    <div class="wrap-input100 validate-input" data-validate="Valid email is required: ex@abc.xyz">
-                        <input class="input100" type="text" name="email_user" placeholder="Email" value="<?php if(isset($_POST['submit'])){echo $_POST['email_user']; } ?>">
-                        <span class="focus-input100"></span>
-                        <span class="symbol-input100">
-                            <i class="fa fa-envelope" aria-hidden="true"></i>
-                        </span>
-                    </div>
-
-                    <div class="wrap-input100 validate-input" data-validate="Password is required">
-                        <input class="input100" type="password" name="studentid_user" id="myInput"
-                            placeholder="Student Id"  value="<?php if(isset($_POST['submit'])){echo $_POST['studentid_user']; } ?>">
-                        <span class="focus-input100"></span>
-                        <span class="symbol-input100">
-                            <i class="fa fa-lock" aria-hidden="true"></i>
-                        </span>
-                    </div>
-                    &nbsp<input type="checkbox" onclick="myFunction()">&nbsp Show Student Id
-
-
-                    <div class="container-login100-form-btn">
-                        <button class="login100-form-btn" type="submit" name="submit">
-                            Login
+                <div class="cb-field">
+                    <label for="myInput">Student ID</label>
+                    <div class="cb-input">
+                        <i class="far fa-id-card"></i>
+                        <input type="password" name="studentid_user" id="myInput" placeholder="Your student ID" required>
+                        <button type="button" class="cb-toggle" onclick="toggleId(this)" aria-label="Show student ID">
+                            <i class="far fa-eye"></i>
                         </button>
                     </div>
+                </div>
 
-                    <div class="text-center p-t-12">
-                        <!-- <span class="txt1">
-							Forgot
-						</span>
-						<a class="txt2" href="#">
-							Username / Password?
-						</a> -->
-                    </div>
+                <button class="cb-btn cb-btn-primary" type="submit" name="submit">
+                    Sign in <i class="fas fa-arrow-right"></i>
+                </button>
 
-                    <div class="text-center p-t-136">
-                        <!-- <a class="txt2" href="#">
-							Create your Account
-							<i class="fa fa-long-arrow-right m-l-5" aria-hidden="true"></i>
-						</a> -->
-                    </div>
-                </form>
-            </div>
-        </div>
+
+                <p class="cb-login-note">Not registered yet? <a href="../club-unimy/club-form.php">Join a club</a></p>
+            </form>
+        </main>
     </div>
 
-
-
-
-    <!--===============================================================================================-->
-    <script src="vendor/jquery/jquery-3.2.1.min.js"></script>
-    <!--===============================================================================================-->
-    <script src="vendor/bootstrap/js/popper.js"></script>
-    <script src="vendor/bootstrap/js/bootstrap.min.js"></script>
-    <!--===============================================================================================-->
-    <script src="vendor/select2/select2.min.js"></script>
-    <!--===============================================================================================-->
-    <script src="vendor/tilt/tilt.jquery.min.js"></script>
     <script>
-    $('.js-tilt').tilt({
-        scale: 1.1
-    })
-
-    function myFunction() {
+    function toggleId(btn) {
         var x = document.getElementById("myInput");
-        if (x.type === "password") {
-            x.type = "text";
-        } else {
-            x.type = "password";
-        }
+        var show = x.type === "password";
+        x.type = show ? "text" : "password";
+        btn.innerHTML = show ? '<i class="far fa-eye-slash"></i>' : '<i class="far fa-eye"></i>';
     }
-
-   
     </script>
-    <!--===============================================================================================-->
-    <script src="js/main.js"></script>
 
 </body>
 
