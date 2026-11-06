@@ -18,12 +18,15 @@ $sql = "UPDATE `inv_orderinfo` SET `Status` = 'Verified' WHERE `inv_orderinfo`.`
   <title>Requester Information</title>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="stylesheet" href="css/bootstrap.min.css">
-  <link rel="stylesheet" type="text/css" href="css/index.css">
+  <link rel="stylesheet" href="../css/bootstrap.min.css">
+  <link rel="stylesheet" type="text/css" href="../css/index.css">
+    <link rel="stylesheet" href="../vendor/font-awesome/css/font-awesome.min.css">
+    <link rel="stylesheet" href="../css/theme.css">
+    <link rel="icon" type="image/svg+xml" href="../img/logo.svg" />
   
 </head>
 
-<body>
+<body class="cb-page">
 	<div class="container">
 	<h2>Ajax Update</h2>
 	<p>Update something with Jquery Ajax</p>

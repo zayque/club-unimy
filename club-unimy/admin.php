@@ -1,80 +1,69 @@
+<?php
+require_once __DIR__ . '/lib/app.php';
+if (is_admin()) {
+    redirect('dashboard.php');
+}
+$flashes = take_flashes();
+$old = $_SESSION['login_old'] ?? '';
+unset($_SESSION['login_old']);
+?>
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
-    <title>REGISTRATION ADMIN</title>
-    <link rel="icon" type="image/ico" href="img/unimy.jpg" />
-
-    <link rel="stylesheet" href="css/bootstrap.min.css">
-    <link rel="stylesheet" type="text/css" href="css/Login_page.css">
-
-
-    <script type="text/javascript">
-    window.history.forward();
-
-    function noBack() {
-        window.history.forward();
-    }
-    </script>
-
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Admin Login · ClubHub</title>
+    <link rel="icon" type="image/svg+xml" href="img/logo.svg" />
+    <link rel="stylesheet" href="vendor/bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="vendor/font-awesome/css/font-awesome.min.css">
+    <link rel="stylesheet" href="css/theme.css">
 </head>
 
-<style>
-.wrap-login::before,
-.wrap-login::after {
-    display: block;
-    content: "";
-    clear: both;
-}
-.responsive {
-  width: 40%;
-  height: auto;
-  border-radius:10px;
-  margin-left:30%;
-}
-</style>
+<body class="cb-auth">
 
-<body onload="noBack();" onpageshow="if (event.persisted) noBack();" onunload="">
-
-    <div class="container">
-        <div style="width:50%; height:700px; position:relative; margin:0px auto; margin-top:20%;">
-        <img src="img/unimy.jpg" alt="Nature" class="responsive">
-            <div class="text-center">
-                <h2>ADMIN<br>Club Registration System</h2>
-                </div>
-                    <div>
-                        <!-- <div style="width:50%; position:absolute; left:50%; top:50%; transform: translate(-50%, 50%)"> -->
-                        <div class="wrap-login col-lg-12">
-                            <h3 class="text-center">Please Login</h3><br>
-                            <form action="adminlogin.php" method="post">
-                                <div class="form-group">
-                                    <label for="email">Student ID</label>
-                                    <input name="studentid" type="text" class="form-control" id="email" placeholder="Student ID"
-                                        required>
-                                </div>
-                                <div class="form-group">
-                                    <label for="password">Password</label>
-                                    <input name="pwd" type="password" class="form-control" id="password"
-                                        placeholder="Password" required>
-                                </div>
-                                <input type="submit" class="btn btn-block" value="Login" name="submit"></input>
-                            </form>
-                            <!-- <center style="margin-top:25px;"><a href="index.php">Back to main</a></center> -->
-                        </div>
-                    </div>
-
-            </div>
+    <div class="cb-auth-card">
+        <div class="cb-auth-brand">
+            <img src="img/logo.svg" alt="ClubHub">
+            <div><span class="cb-badge">Admin Portal</span></div>
+            <h1>Welcome back</h1>
+            <p>Sign in to manage clubs, members and activities.</p>
         </div>
 
-        <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js"
-            integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous">
-        </script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.3/umd/popper.min.js"
-            integrity="sha384-vFJXuSJphROIrBnz7yo7oB41mKfc8JzQZiCq4NCceLEaO4IHwicKwpJf9c9IpFgh" crossorigin="anonymous">
-        </script>
-        <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.2/js/bootstrap.min.js"
-            integrity="sha384-alpBpkh1PFOepccYVYDB4do5UnbKysX5WZXm3XxPqe5iKTfUKjNkCk9SaVuEZflJ" crossorigin="anonymous">
-        </script>
+        <?php foreach ($flashes as $f) { ?>
+        <div class="alert <?= $f['type'] === 'error' ? 'alert-danger' : 'alert-success' ?> py-2 small font-weight-bold" role="alert">
+            <i class="fa <?= $f['type'] === 'error' ? 'fa-exclamation-circle' : 'fa-check-circle' ?> mr-1"></i><?= e($f['message']) ?>
+        </div>
+        <?php } ?>
+
+        <form action="adminlogin.php" method="post">
+            <?= csrf_field() ?>
+            <div class="form-group">
+                <label for="studentid">Student ID or username</label>
+                <div class="cb-input-wrap">
+                    <i class="fa fa-id-card-o"></i>
+                    <input name="studentid" type="text" class="form-control" id="studentid" placeholder="e.g. B09190001"
+                        value="<?= e($old) ?>" required autofocus>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <div class="cb-input-wrap">
+                    <i class="fa fa-lock"></i>
+                    <input name="pwd" type="password" class="form-control" id="password" placeholder="••••••••" required>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block" name="submit">
+                Sign in <i class="fa fa-arrow-right ml-1"></i>
+            </button>
+        </form>
+
+
+        <div class="cb-auth-foot">
+            <a href="club-form.php"><i class="fa fa-external-link"></i> Open the public registration form</a>
+        </div>
+    </div>
+
 </body>
 
 </html>
